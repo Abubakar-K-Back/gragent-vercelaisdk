@@ -1,0 +1,36 @@
+{
+  "name": "gragent",
+  "version": "1.0.0",
+  "description": "CLI to scaffold and run AI agents powered by Vercel AI SDK + grapi MCP",
+  "type": "module",
+  "bin": {
+    "gragent": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "dev": "tsc -b && node dist/index.js"
+  },
+  "oclif": {
+    "bin": "gragent",
+    "dirname": "gragent",
+    "commands": "./dist/commands",
+    "topicSeparator": " "
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.84",
+    "@ai-sdk/google": "^3.0.82",
+    "@ai-sdk/mcp": "^1.0.51",
+    "@ai-sdk/openai": "^3.0.71",
+    "@anthropic-ai/sdk": "^0.104.2",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@oclif/core": "^4.11.5",
+    "ai": "^6.0.206",
+    "chalk": "^5.6.2",
+    "ts-morph": "^28.0.0",
+    "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0"
+  }
+}
