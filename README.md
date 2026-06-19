@@ -5,9 +5,13 @@ CLI to scaffold and run AI agents powered by the [Vercel AI SDK](https://sdk.ver
 ## Features
 
 - **Run** agents against any prompt using Claude, OpenAI, Gemini, or Groq
+- **Chat** interactively with full conversation memory (remembers tool calls across turns)
+- **Pipeline** — chain multiple agents sequentially, each receiving the previous output
+- **Listen** — Kafka consumer mode: receive tasks from a topic, run agents, publish results back
+- **UI** — browser-based chat interface with tools sidebar
 - **List** all tools available on an MCP server
 - **Scaffold** full agent projects from plain English descriptions
-- Supports streaming output, custom system prompts, and bearer token auth
+- Multiple MCP servers, streaming output, verbose tool tracing, bearer token auth
 
 ---
 
@@ -61,11 +65,160 @@ gragent run "summarize all contacts" \
 | `--llm` | `-l` | LLM provider (`claude`, `openai`, `gemini`, `groq`) | `claude` |
 | `--model` | | Override model (e.g. `gpt-4o-mini`, `claude-haiku-4-5`) | Provider default |
 | `--api-key` | `-k` | API key for the LLM provider | Reads from env var |
-| `--mcp` | `-m` | MCP server URL | — |
+| `--mcp` | `-m` | MCP server URL (repeatable for multiple) | — |
 | `--auth` | `-a` | Bearer token for MCP server authentication | — |
 | `--system` | | Custom system prompt | Built-in default |
 | `--steps` | `-s` | Max tool-use steps | `10` |
 | `--stream` | | Stream output token by token | `false` |
+| `--verbose` | `-v` | Show each tool call and result | `false` |
+| `--var` | | Template variable `key=value` (repeatable) | — |
+
+---
+
+### `gragent chat`
+
+Interactive terminal chat with full conversation memory — the agent remembers previous turns including tool calls.
+
+```bash
+gragent chat \
+  --llm gemini \
+  --api-key YOUR_KEY \
+  --mcp https://your-grapi.example.com/mcp/your-mcp
+
+# With session persistence
+gragent chat \
+  --llm gemini \
+  --api-key YOUR_KEY \
+  --mcp https://your-grapi.example.com/mcp/your-mcp \
+  --save session.json
+
+# Resume a previous session
+gragent chat \
+  --llm gemini \
+  --api-key YOUR_KEY \
+  --mcp https://your-grapi.example.com/mcp/your-mcp \
+  --load session.json
+```
+
+Special commands during chat: `clear` (reset history), `history` (show message count), `exit`.
+
+**Flags**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--llm` | `-l` | LLM provider | `claude` |
+| `--api-key` | `-k` | API key | Reads from env var |
+| `--mcp` | `-m` | MCP server URL (repeatable) | — |
+| `--auth` | `-a` | Bearer token | — |
+| `--steps` | `-s` | Max steps per turn | `10` |
+| `--verbose` | `-v` | Show tool calls + memory count | `false` |
+| `--save` | | Save session to JSON on exit | — |
+| `--load` | | Resume session from JSON | — |
+
+---
+
+### `gragent pipeline`
+
+Chain multiple agents sequentially. Use `{{output}}` to pass the previous agent's output to the next.
+
+```bash
+gragent pipeline \
+  "get all addresses in New York and return their IDs" \
+  "for this data: {{output}} — group by zip code and find the most common one" \
+  "write a summary report based on: {{output}}" \
+  --llm gemini \
+  --api-key YOUR_KEY \
+  --mcp https://your-grapi.example.com/mcp/your-mcp
+```
+
+**Flags**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--llm` | `-l` | LLM provider | `claude` |
+| `--api-key` | `-k` | API key | Reads from env var |
+| `--mcp` | `-m` | MCP server URL (repeatable) | — |
+| `--auth` | `-a` | Bearer token | — |
+| `--steps` | `-s` | Max steps per agent | `10` |
+| `--verbose` | `-v` | Show tool calls | `false` |
+
+---
+
+### `gragent listen`
+
+Kafka consumer mode — listens for agent tasks on a Kafka topic, runs the agent, and publishes results back.
+
+```bash
+gragent listen \
+  --broker localhost:9092 \
+  --input agent-tasks \
+  --output agent-results \
+  --mcp https://your-grapi.example.com/mcp/your-mcp \
+  --llm gemini \
+  --api-key YOUR_KEY
+```
+
+**Input message format** (publish to `agent-tasks`):
+```json
+{
+  "taskId": "abc123",
+  "prompt": "get all addresses in New York and return a summary",
+  "mcp": "https://your-grapi.example.com/mcp/your-mcp"
+}
+```
+
+**Output message format** (consumed from `agent-results`):
+```json
+{
+  "taskId": "abc123",
+  "status": "success",
+  "result": "Here is the summary...",
+  "durationMs": 4824,
+  "prompt": "get all addresses in New York and return a summary"
+}
+```
+
+**Flags**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--broker` | `-b` | Kafka broker address | `localhost:9092` |
+| `--input` | `-i` | Input topic for tasks | `agent-tasks` |
+| `--output` | `-o` | Output topic for results | `agent-results` |
+| `--group-id` | | Kafka consumer group ID | `gragent-consumers` |
+| `--llm` | `-l` | LLM provider | `claude` |
+| `--api-key` | `-k` | API key | Reads from env var |
+| `--mcp` | `-m` | Default MCP URL (overridable per message) | — |
+| `--auth` | `-a` | Bearer token | — |
+| `--steps` | `-s` | Max steps per agent run | `10` |
+| `--verbose` | `-v` | Show tool calls | `false` |
+
+---
+
+### `gragent ui`
+
+Launch a browser UI to interact with your MCP agent.
+
+```bash
+gragent ui \
+  --mcp https://your-grapi.example.com/mcp/your-mcp \
+  --llm gemini \
+  --api-key YOUR_KEY \
+  --port 4000
+```
+
+Then open `http://localhost:4000` in your browser.
+
+**Flags**
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--llm` | `-l` | LLM provider | `claude` |
+| `--api-key` | `-k` | API key | Reads from env var |
+| `--mcp` | `-m` | MCP server URL (repeatable) | — |
+| `--auth` | `-a` | Bearer token | — |
+| `--steps` | `-s` | Max steps per run | `10` |
+| `--port` | `-p` | Port to listen on | `4000` |
 
 ---
 
@@ -79,14 +232,6 @@ gragent list --mcp https://your-grapi.example.com/mcp/your-mcp
 # Output as JSON
 gragent list --mcp https://your-grapi.example.com/mcp/your-mcp --json
 ```
-
-**Flags**
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--mcp` | `-m` | MCP server URL (required) |
-| `--auth` | `-a` | Bearer token for MCP authentication |
-| `--json` | | Output as JSON |
 
 ---
 
@@ -115,21 +260,6 @@ The scaffolded project includes:
 - `.gitignore`
 - `README.md`
 
-**Flags**
-
-| Flag | Short | Description | Default |
-|------|-------|-------------|---------|
-| `--llm` | `-l` | LLM provider to use for scaffolding | `claude` |
-| `--model` | | Override model | Provider default |
-| `--api-key` | `-k` | API key for the LLM provider | Reads from env var |
-| `--mcp` | `-m` | MCP server URL to pre-fill in the scaffolded agent | — |
-| `--auth` | `-a` | Bearer token for MCP authentication | — |
-| `--name` | `-n` | Override the generated agent name | Auto-generated |
-| `--system` | | Override the generated system prompt | Auto-generated |
-| `--steps` | `-s` | Override max steps | Auto-generated |
-| `--stream` | | Scaffold with streaming output | `false` |
-| `--outDir` | `-o` | Output directory | `.` |
-
 ---
 
 ## LLM Providers
@@ -156,7 +286,6 @@ MCP_CONFIGS={"enable":true}
 Then discover available MCP endpoints:
 
 ```bash
-# grapi exposes multiple MCP namespaces
 gragent list --mcp https://your-grapi.example.com/mcp/your-mcp-name
 ```
 
@@ -167,69 +296,84 @@ gragent list --mcp https://your-grapi.example.com/mcp/your-mcp-name
 ### Discover available tools
 ```bash
 gragent list --mcp https://your-grapi.example.com/mcp/acelink-mcp
-
-# Found 50 tools:
-#   get_customers         Execute GET /customers
-#   post_customers        Execute POST /customers
-#   get_addresses         Execute GET /addresses
-#   ...
+# Found 50 tools: get_customers, post_customers, get_addresses, ...
 ```
 
 ### Count resources
 ```bash
 gragent run "how many customers do we have?" \
-  --llm gemini \
-  --api-key YOUR_KEY \
+  --llm gemini --api-key YOUR_KEY \
   --mcp https://your-grapi.example.com/mcp/acelink-mcp
-
 # Output: There are 5 customers in total.
 ```
 
-### Create records from plain English
+### Multi-step business report
 ```bash
-gragent run "check the format for addresses and create me 3 random addresses with different US states and cities, then return all addresses" \
-  --llm gemini \
-  --api-key YOUR_KEY \
-  --mcp https://your-grapi.example.com/mcp/acelink-mcp
-
-# Agent figures out the schema, creates 3 addresses, then lists all of them
-```
-
-### Filter and query
-```bash
-gragent run "return all addresses in New York" \
-  --llm gemini \
-  --api-key YOUR_KEY \
-  --mcp https://your-grapi.example.com/mcp/acelink-mcp
-
-# Agent builds the LoopBack filter automatically and returns only NY addresses
-```
-
-### Full business report (multi-step)
-```bash
-gragent run "Give me a full business summary:
-1. Get total count of customers, contacts and addresses
-2. List all customers and for each get their contacts and addresses
-3. List all AWS products
-4. Check AWS opportunities
-5. Return a nicely formatted summary report" \
-  --llm gemini \
-  --api-key YOUR_KEY \
+gragent run "get total count of customers, contacts and addresses, list all AWS products and opportunities, return a formatted summary report" \
+  --llm gemini --api-key YOUR_KEY \
   --mcp https://your-grapi.example.com/mcp/acelink-mcp \
   --steps 20
-
 # Agent makes 10+ API calls and returns a full formatted report
 ```
 
-### Scaffold a new agent project
+### Interactive chat with memory
 ```bash
-gragent create "fetch all AWS opportunities and sync them to matching customers" \
-  --llm gemini \
-  --api-key YOUR_KEY \
-  --mcp https://your-grapi.example.com/mcp/acelink-mcp \
-  --outDir ./my-agents
+gragent chat --llm gemini --api-key YOUR_KEY --mcp https://your-grapi.example.com/mcp/acelink-mcp
 
-# Generates a full ready-to-run agent project with package.json, src/index.ts, .env, README
+# You: get all addresses in New York grouped by zip code
+# Agent: [fetches data, groups, returns report]
+# You: add a summary section at the top         ← agent remembers the report
+# You: shorten it                               ← still remembers
+```
+
+### Pipeline — chain agents
+```bash
+gragent pipeline \
+  "get all addresses in New York" \
+  "from this data: {{output}} — find the zip code with most addresses" \
+  "write a one-page business report about: {{output}}" \
+  --llm gemini --api-key YOUR_KEY \
+  --mcp https://your-grapi.example.com/mcp/acelink-mcp
+```
+
+### Kafka event-driven agents
+```bash
+# Terminal 1 — start gragent as a Kafka consumer
+gragent listen \
+  --broker localhost:9092 \
+  --mcp https://your-grapi.example.com/mcp/acelink-mcp \
+  --llm gemini --api-key YOUR_KEY
+
+# Terminal 2 — publish a task
+echo '{"taskId":"job-1","prompt":"get all addresses in New York and summarize"}' | \
+  kafka-console-producer --broker-list localhost:9092 --topic agent-tasks
+
+# Terminal 3 — consume results
+kafka-console-consumer --bootstrap-server localhost:9092 --topic agent-results --from-beginning
+# {"taskId":"job-1","status":"success","result":"5 addresses found...","durationMs":4824}
+```
+
+---
+
+## Architecture
+
+```
+Any Service / grapi (LB4)
+        │  publishes task to agent-tasks
+        ▼
+   Kafka Broker
+        │  consumed by
+        ▼
+  gragent listen
+        │  runs AI agent
+        ▼
+   MCP Tools (grapi)
+        │  result published to agent-results
+        ▼
+   Kafka Broker
+        │  consumed by
+        ▼
+Any Service / grapi (LB4)
 ```
 
 ---
@@ -237,5 +381,6 @@ gragent create "fetch all AWS opportunities and sync them to matching customers"
 ## Related
 
 - [grapi](https://github.com/grapple-solution/grapi) — The backend framework that powers the MCP server
+- [loopback-connector-kafka](https://www.npmjs.com/package/@abkawanz/loopback-connector-kafka) — Kafka connector for grapi (LB4)
 - [Vercel AI SDK](https://sdk.vercel.ai/) — The AI SDK used under the hood
 - [Model Context Protocol](https://modelcontextprotocol.io/) — The protocol for connecting agents to tools

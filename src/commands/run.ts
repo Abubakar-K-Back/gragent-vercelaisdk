@@ -4,18 +4,19 @@ import { LLMProvider } from '../utils/llm.js';
 import chalk from 'chalk';
 
 export default class Run extends Command {
-  static description = 'Run an AI agent against a prompt using grapi MCP tools';
+  static description = 'Run an AI agent against a prompt using MCP tools';
 
   static examples = [
-    '<%= config.bin %> run "list all users" --mcp http://localhost:3333/mcp',
-    '<%= config.bin %> run "create a report" --llm openai --model gpt-4o-mini --mcp http://localhost:3333/mcp',
-    '<%= config.bin %> run "summarize data" --mcp http://localhost:3333/mcp --auth my-token --stream',
+    '<%= config.bin %> run "list all customers" --mcp http://localhost:3000/mcp/acelink-mcp',
+    '<%= config.bin %> run "list all customers" --llm openai --api-key sk-... --mcp http://localhost:3000/mcp/acelink-mcp',
+    '<%= config.bin %> run "sync {{resource}} between staging and prod" --var resource=customers --mcp https://staging/mcp --mcp https://prod/mcp',
+    '<%= config.bin %> run "list all customers" --verbose --stream',
   ];
 
   static args = {
     prompt: Args.string({
       required: true,
-      description: 'The task or question for the agent',
+      description: 'The task or question for the agent. Use {{var}} for template variables.',
     }),
   };
 
@@ -29,17 +30,18 @@ export default class Run extends Command {
     model: Flags.string({
       description: 'Specific model to use (overrides provider default)',
     }),
+    'api-key': Flags.string({
+      char: 'k',
+      description: 'API key for the LLM provider (overrides env var)',
+    }),
     mcp: Flags.string({
       char: 'm',
-      description: 'MCP server URL',
+      description: 'MCP server URL (can be specified multiple times)',
+      multiple: true,
     }),
     auth: Flags.string({
       char: 'a',
       description: 'Bearer token for MCP server authentication',
-    }),
-    'api-key': Flags.string({
-      char: 'k',
-      description: 'API key for the LLM provider (overrides env var)',
     }),
     steps: Flags.integer({
       char: 's',
@@ -53,27 +55,49 @@ export default class Run extends Command {
       description: 'Stream output token by token',
       default: false,
     }),
+    verbose: Flags.boolean({
+      char: 'v',
+      description: 'Show each tool call and result as it happens',
+      default: false,
+    }),
+    var: Flags.string({
+      description: 'Template variable in key=value format (can be specified multiple times)',
+      multiple: true,
+    }),
   };
 
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Run);
     const provider = flags.llm as LLMProvider;
 
+    // Replace {{var}} placeholders in prompt
+    let prompt = args.prompt;
+    for (const v of flags.var ?? []) {
+      const [key, ...rest] = v.split('=');
+      const value = rest.join('=');
+      prompt = prompt.replaceAll(`{{${key}}}`, value);
+    }
+
+    const mcpUrls = flags.mcp ?? [];
+
     this.log(chalk.cyan(`\n🤖 Running agent (${provider}${flags.model ? `:${flags.model}` : ''})...`));
-    if (flags.mcp) this.log(chalk.dim(`   MCP: ${flags.mcp}`));
+    if (mcpUrls.length === 1) this.log(chalk.dim(`   MCP: ${mcpUrls[0]}`));
+    if (mcpUrls.length > 1) this.log(chalk.dim(`   MCPs: ${mcpUrls.join(', ')}`));
     if (flags.stream) this.log(chalk.dim(`   Streaming: on`));
+    if (flags.verbose) this.log(chalk.dim(`   Verbose: on`));
     this.log('');
 
     const result = await runAgent({
-      prompt: args.prompt,
+      prompt,
       provider,
       model: flags.model,
       apiKey: flags['api-key'],
-      mcpUrl: flags.mcp,
+      mcpUrls,
       auth: flags.auth,
       system: flags.system,
       maxSteps: flags.steps,
       streaming: flags.stream,
+      verbose: flags.verbose,
     });
 
     if (!flags.stream) {
