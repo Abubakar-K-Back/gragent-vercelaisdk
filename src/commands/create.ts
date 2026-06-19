@@ -38,7 +38,7 @@ export default class Create extends Command {
     llm: Flags.string({
       char: 'l',
       description: 'LLM provider to use',
-      options: ['claude', 'openai', 'gemini'],
+      options: ['claude', 'openai', 'gemini', 'groq'],
       default: 'claude',
     }),
     model: Flags.string({
@@ -330,6 +330,11 @@ ${spec.useMcp ? `## MCP\n\nConnects to MCP server at \`MCP_URL\`. Make sure grap
         return {
           importLine: `import { google } from '@ai-sdk/google';`,
           modelLine: `const model = google(${modelStr ?? `'gemini-1.5-pro'`});`,
+        };
+      case 'groq':
+        return {
+          importLine: `import { createGroq } from '@ai-sdk/groq';`,
+          modelLine: `const model = createGroq({ apiKey: process.env.GROQ_API_KEY })(${modelStr ?? `'llama-3.3-70b-versatile'`});`,
         };
     }
   }

@@ -23,7 +23,7 @@ export default class Run extends Command {
     llm: Flags.string({
       char: 'l',
       description: 'LLM provider to use',
-      options: ['claude', 'openai', 'gemini'],
+      options: ['claude', 'openai', 'gemini', 'groq'],
       default: 'claude',
     }),
     model: Flags.string({
@@ -36,6 +36,10 @@ export default class Run extends Command {
     auth: Flags.string({
       char: 'a',
       description: 'Bearer token for MCP server authentication',
+    }),
+    'api-key': Flags.string({
+      char: 'k',
+      description: 'API key for the LLM provider (overrides env var)',
     }),
     steps: Flags.integer({
       char: 's',
@@ -64,6 +68,7 @@ export default class Run extends Command {
       prompt: args.prompt,
       provider,
       model: flags.model,
+      apiKey: flags['api-key'],
       mcpUrl: flags.mcp,
       auth: flags.auth,
       system: flags.system,

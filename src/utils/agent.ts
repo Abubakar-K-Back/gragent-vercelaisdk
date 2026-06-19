@@ -6,6 +6,7 @@ export interface RunAgentOptions {
   prompt: string;
   provider: LLMProvider;
   model?: string;
+  apiKey?: string;
   mcpUrl?: string;
   auth?: string;
   system?: string;
@@ -14,9 +15,9 @@ export interface RunAgentOptions {
 }
 
 export async function runAgent(options: RunAgentOptions): Promise<string> {
-  const { prompt, provider, model, mcpUrl, auth, system, maxSteps = 10, streaming = false } = options;
+  const { prompt, provider, model, apiKey, mcpUrl, auth, system, maxSteps = 10, streaming = false } = options;
 
-  const llm = getLLM(provider, model);
+  const llm = getLLM(provider, model, apiKey);
 
   let tools: Record<string, unknown> | undefined;
   let mcp: Awaited<ReturnType<typeof createMCPClient>> | undefined;
@@ -32,7 +33,13 @@ export async function runAgent(options: RunAgentOptions): Promise<string> {
     tools = await mcp.tools();
   }
 
-  const systemPrompt = system ?? 'You are a helpful AI agent. Use the available tools to complete tasks.';
+  const systemPrompt = system ?? `You are a helpful AI agent. Use the available tools to complete tasks.
+Tool naming convention: tools follow the pattern <method>_<resource>. For example:
+- get_customers → GET /customers (lists ALL customers, no parameters needed)
+- get_customers-by-id → GET /customers/{id} (requires an id)
+- post_customers → POST /customers (create a customer)
+- get_customers-count → GET /customers/count (returns count only)
+Always prefer the simplest tool that answers the question. To list all resources, use get_<resource> with no parameters.`;
   const stopCondition = stepCountIs(maxSteps);
   const toolsParam = tools as Parameters<typeof generateText>[0]['tools'];
 
