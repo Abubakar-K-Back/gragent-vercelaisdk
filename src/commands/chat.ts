@@ -2,6 +2,7 @@ import { Command, Flags } from '@oclif/core';
 import { generateText, stepCountIs } from 'ai';
 import { createMCPClient } from '@ai-sdk/mcp';
 import { getLLM, LLMProvider } from '../utils/llm.js';
+import { loadConfig } from '../utils/config.js';
 import chalk from 'chalk';
 import * as readline from 'node:readline';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -59,14 +60,26 @@ export default class Chat extends Command {
     load: Flags.string({
       description: 'Load and resume a previous conversation from a JSON file',
     }),
+    config: Flags.string({
+      char: 'c',
+      description: 'Path to a gragent config file (default: gragent.config.json)',
+    }),
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(Chat);
-    const provider = flags.llm as LLMProvider;
-    const mcpUrls = flags.mcp ?? [];
 
-    const llm = getLLM(provider, flags.model, flags['api-key']);
+    const cfg = loadConfig(flags.config);
+    const provider = (flags.llm !== 'claude' ? flags.llm : cfg.llm ?? flags.llm) as LLMProvider;
+    const apiKey = flags['api-key'] ?? cfg.apiKey;
+    const model = flags.model ?? cfg.model;
+    const auth = flags.auth ?? cfg.auth;
+    const system = flags.system ?? cfg.system;
+    const steps = flags.steps !== 10 ? flags.steps : cfg.steps ?? flags.steps;
+    const verbose = flags.verbose || (cfg.verbose ?? false);
+    const mcpUrls = flags.mcp?.length ? flags.mcp : cfg.mcps ?? [];
+
+    const llm = getLLM(provider, model, apiKey);
 
     // Connect to all MCP servers
     const mcpClients: Awaited<ReturnType<typeof createMCPClient>>[] = [];
@@ -78,7 +91,7 @@ export default class Chat extends Command {
           transport: {
             type: 'http',
             url,
-            ...(flags.auth ? { headers: { Authorization: `Bearer ${flags.auth}` } } : {}),
+            ...(auth ? { headers: { Authorization: `Bearer ${auth}` } } : {}),
           },
         });
         const serverTools = await client.tools();
@@ -87,7 +100,7 @@ export default class Chat extends Command {
       }
     }
 
-    const systemPrompt = flags.system ?? `You are a helpful AI agent. Use the available tools to complete tasks.
+    const systemPrompt = system ?? `You are a helpful AI agent. Use the available tools to complete tasks.
 Tool naming convention: tools follow the pattern <method>_<resource>. For example:
 - get_customers → GET /customers (lists ALL customers, no parameters needed)
 - get_customers-by-id → GET /customers/{id} (requires an id)
@@ -103,7 +116,7 @@ Always prefer the simplest tool that answers the question. To list all resources
     }
 
     // Print header
-    this.log(chalk.cyan(`\n🤖 gragent chat (${provider}${flags.model ? `:${flags.model}` : ''})`));
+    this.log(chalk.cyan(`\n🤖 gragent chat (${provider}${model ? `:${model}` : ''})`));
     if (mcpUrls.length) this.log(chalk.dim(`   MCPs: ${mcpUrls.join(', ')}`));
     if (tools) this.log(chalk.dim(`   Tools: ${Object.keys(tools).length} available`));
     this.log(chalk.dim(`   Type "exit" or press Ctrl+C to quit`));
@@ -177,8 +190,8 @@ Always prefer the simplest tool that answers the question. To list all resources
             system: systemPrompt,
             messages,
             tools: toolsParam,
-            stopWhen: stepCountIs(flags.steps),
-            onStepFinish: flags.verbose
+            stopWhen: stepCountIs(steps),
+            onStepFinish: verbose
               ? (step: any) => {
                   for (const call of step.toolCalls ?? []) {
                     this.log(chalk.yellow(`\n  ⚙ ${chalk.bold(call.toolName)} ${chalk.dim(JSON.stringify(call.args))}`));
@@ -203,11 +216,11 @@ Always prefer the simplest tool that answers the question. To list all resources
             messages.push({ role: 'assistant', content: response.text });
           }
 
-          if (flags.verbose) {
+          if (verbose) {
             this.log(chalk.dim(`  [memory] ${messages.length} messages in context`));
           }
 
-          if (flags.verbose) {
+          if (verbose) {
             this.log(chalk.dim(`\n(${response.steps.length} steps)\n`));
           }
 

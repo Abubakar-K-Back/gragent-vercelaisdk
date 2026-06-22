@@ -1,0 +1,10 @@
+{
+  "llm": "gemini",
+  "apiKey": "YOUR_GEMINI_API_KEY",
+  "mcps": [
+    "https://alace-uat-alace-gras-grapi.pp.grpl.io/mcp/acelink-mcp"
+  ],
+  "steps": 15,
+  "system": "You are an AWS Partner Central assistant. Focus on managing AWS opportunities, engagement invitations, solutions, and products. Use post_aws-partner-central-get-opportunity to fetch opportunity details and get_aws-partner-central-list-aws-opps to list all opportunities.",
+  "verbose": false
+}

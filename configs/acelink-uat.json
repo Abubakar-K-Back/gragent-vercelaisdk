@@ -1,0 +1,10 @@
+{
+  "llm": "gemini",
+  "apiKey": "YOUR_GEMINI_API_KEY",
+  "mcps": [
+    "https://alace-uat-alace-gras-grapi.pp.grpl.io/mcp/acelink-mcp"
+  ],
+  "steps": 15,
+  "system": "You are a CRM assistant connected to the AceLink UAT environment. Use the available tools to manage customers, contacts, addresses, and AWS products. Tool naming: get_customers lists ALL customers, get_customers-by-id requires an id.",
+  "verbose": false
+}

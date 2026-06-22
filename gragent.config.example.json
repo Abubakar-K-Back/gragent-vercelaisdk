@@ -1,0 +1,9 @@
+{
+  "llm": "gemini",
+  "apiKey": "YOUR_GEMINI_API_KEY",
+  "mcps": [
+    "https://your-grapi.example.com/mcp/your-mcp-name"
+  ],
+  "steps": 10,
+  "verbose": false
+}

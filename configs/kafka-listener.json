@@ -1,0 +1,13 @@
+{
+  "llm": "gemini",
+  "apiKey": "YOUR_GEMINI_API_KEY",
+  "mcps": [
+    "https://alace-uat-alace-gras-grapi.pp.grpl.io/mcp/acelink-mcp"
+  ],
+  "broker": "localhost:9092",
+  "inputTopic": "agent-tasks",
+  "outputTopic": "agent-results",
+  "groupId": "gragent-consumers",
+  "steps": 10,
+  "verbose": true
+}

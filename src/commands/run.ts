@@ -1,6 +1,7 @@
 import { Args, Command, Flags } from '@oclif/core';
 import { runAgent } from '../utils/agent.js';
 import { LLMProvider } from '../utils/llm.js';
+import { loadConfig } from '../utils/config.js';
 import chalk from 'chalk';
 
 export default class Run extends Command {
@@ -64,11 +65,26 @@ export default class Run extends Command {
       description: 'Template variable in key=value format (can be specified multiple times)',
       multiple: true,
     }),
+    config: Flags.string({
+      char: 'c',
+      description: 'Path to a gragent config file (default: gragent.config.json)',
+    }),
   };
 
   async run(): Promise<void> {
     const { args, flags } = await this.parse(Run);
-    const provider = flags.llm as LLMProvider;
+
+    // Load config file and merge (flags override config)
+    const cfg = loadConfig(flags.config);
+    const provider = (flags.llm !== 'claude' ? flags.llm : cfg.llm ?? flags.llm) as LLMProvider;
+    const apiKey = flags['api-key'] ?? cfg.apiKey;
+    const model = flags.model ?? cfg.model;
+    const auth = flags.auth ?? cfg.auth;
+    const system = flags.system ?? cfg.system;
+    const steps = flags.steps !== 10 ? flags.steps : cfg.steps ?? flags.steps;
+    const stream = flags.stream || (cfg.stream ?? false);
+    const verbose = flags.verbose || (cfg.verbose ?? false);
+    const mcpUrls = flags.mcp?.length ? flags.mcp : cfg.mcps ?? [];
 
     // Replace {{var}} placeholders in prompt
     let prompt = args.prompt;
@@ -78,29 +94,27 @@ export default class Run extends Command {
       prompt = prompt.replaceAll(`{{${key}}}`, value);
     }
 
-    const mcpUrls = flags.mcp ?? [];
-
-    this.log(chalk.cyan(`\n🤖 Running agent (${provider}${flags.model ? `:${flags.model}` : ''})...`));
+    this.log(chalk.cyan(`\n🤖 Running agent (${provider}${model ? `:${model}` : ''})...`));
     if (mcpUrls.length === 1) this.log(chalk.dim(`   MCP: ${mcpUrls[0]}`));
     if (mcpUrls.length > 1) this.log(chalk.dim(`   MCPs: ${mcpUrls.join(', ')}`));
-    if (flags.stream) this.log(chalk.dim(`   Streaming: on`));
-    if (flags.verbose) this.log(chalk.dim(`   Verbose: on`));
+    if (stream) this.log(chalk.dim(`   Streaming: on`));
+    if (verbose) this.log(chalk.dim(`   Verbose: on`));
     this.log('');
 
     const result = await runAgent({
       prompt,
       provider,
-      model: flags.model,
-      apiKey: flags['api-key'],
+      model,
+      apiKey,
       mcpUrls,
-      auth: flags.auth,
-      system: flags.system,
-      maxSteps: flags.steps,
-      streaming: flags.stream,
-      verbose: flags.verbose,
+      auth,
+      system,
+      maxSteps: steps,
+      streaming: stream,
+      verbose,
     });
 
-    if (!flags.stream) {
+    if (!stream) {
       this.log(chalk.bold('--- Agent Output ---'));
       this.log(result);
     }
