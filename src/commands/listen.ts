@@ -2,6 +2,7 @@ import { Command, Flags } from '@oclif/core';
 import { Kafka, logLevel } from 'kafkajs';
 import { runAgent } from '../utils/agent.js';
 import { LLMProvider } from '../utils/llm.js';
+import { loadConfig } from '../utils/config.js';
 import chalk from 'chalk';
 
 export default class Listen extends Command {
@@ -13,6 +14,10 @@ export default class Listen extends Command {
   ];
 
   static flags = {
+    config: Flags.string({
+      char: 'c',
+      description: 'Path to a gragent config file (JSON)',
+    }),
     broker: Flags.string({
       char: 'b',
       description: 'Kafka broker address',
@@ -68,26 +73,32 @@ export default class Listen extends Command {
 
   async run(): Promise<void> {
     const { flags } = await this.parse(Listen);
-    const provider = flags.llm as LLMProvider;
-    const defaultMcpUrls = flags.mcp ?? [];
+    const cfg = loadConfig(flags.config);
+    const provider = (flags.llm !== 'claude' ? flags.llm : cfg.llm ?? flags.llm) as LLMProvider;
+    const apiKey = flags['api-key'] ?? cfg.apiKey;
+    const defaultMcpUrls = flags.mcp?.length ? flags.mcp : cfg.mcps ?? [];
+    const broker = flags.broker !== 'localhost:9092' ? flags.broker : cfg.broker ?? flags.broker;
+    const inputTopic = flags.input !== 'agent-tasks' ? flags.input : cfg.inputTopic ?? flags.input;
+    const outputTopic = flags.output !== 'agent-results' ? flags.output : cfg.outputTopic ?? flags.output;
+    const groupId = flags['group-id'] !== 'gragent-consumers' ? flags['group-id'] : cfg.groupId ?? flags['group-id'];
 
     const kafka = new Kafka({
       clientId: 'gragent',
-      brokers: [flags.broker],
+      brokers: [broker],
       logLevel: logLevel.ERROR,
     });
 
-    const consumer = kafka.consumer({ groupId: flags['group-id'] });
+    const consumer = kafka.consumer({ groupId });
     const producer = kafka.producer();
 
     await consumer.connect();
     await producer.connect();
-    await consumer.subscribe({ topic: flags.input, fromBeginning: false });
+    await consumer.subscribe({ topic: inputTopic, fromBeginning: false });
 
     this.log(chalk.cyan(`\n🎧 gragent listening on Kafka`));
-    this.log(chalk.dim(`   Broker:  ${flags.broker}`));
-    this.log(chalk.dim(`   Input:   ${flags.input}`));
-    this.log(chalk.dim(`   Output:  ${flags.output}`));
+    this.log(chalk.dim(`   Broker:  ${broker}`));
+    this.log(chalk.dim(`   Input:   ${inputTopic}`));
+    this.log(chalk.dim(`   Output:  ${outputTopic}`));
     this.log(chalk.dim(`   LLM:     ${provider}${flags.model ? `:${flags.model}` : ''}`));
     if (defaultMcpUrls.length) this.log(chalk.dim(`   MCPs:    ${defaultMcpUrls.join(', ')}`));
     this.log(chalk.dim(`   Press Ctrl+C to stop\n`));
@@ -138,19 +149,19 @@ export default class Listen extends Command {
           const result = await runAgent({
             prompt,
             provider,
-            model: flags.model,
-            apiKey: flags['api-key'],
+            model: flags.model ?? cfg.model,
+            apiKey,
             mcpUrls,
-            auth: flags.auth,
-            maxSteps: flags.steps,
-            verbose: flags.verbose,
+            auth: flags.auth ?? cfg.auth,
+            maxSteps: flags.steps ?? cfg.steps ?? 10,
+            verbose: flags.verbose || cfg.verbose || false,
           });
 
           const durationMs = Date.now() - startedAt;
           this.log(chalk.green(`[${taskId}] Done in ${durationMs}ms`));
 
           await producer.send({
-            topic: flags.output,
+            topic: outputTopic,
             messages: [{
               key: taskId,
               value: JSON.stringify({
@@ -167,7 +178,7 @@ export default class Listen extends Command {
           this.log(chalk.red(`[${taskId}] Failed: ${err?.message ?? String(err)}`));
 
           await producer.send({
-            topic: flags.output,
+            topic: outputTopic,
             messages: [{
               key: taskId,
               value: JSON.stringify({

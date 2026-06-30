@@ -1,5 +1,6 @@
 import { Command, Flags } from '@oclif/core';
 import { createMCPClient } from '@ai-sdk/mcp';
+import { loadConfig } from '../utils/config.js';
 import chalk from 'chalk';
 
 export default class List extends Command {
@@ -11,10 +12,13 @@ export default class List extends Command {
   ];
 
   static flags = {
+    config: Flags.string({
+      char: 'c',
+      description: 'Path to a gragent config file (JSON)',
+    }),
     mcp: Flags.string({
       char: 'm',
       description: 'MCP server URL',
-      required: true,
     }),
     auth: Flags.string({
       char: 'a',
@@ -28,14 +32,21 @@ export default class List extends Command {
 
   async run(): Promise<void> {
     const { flags } = await this.parse(List);
+    const cfg = loadConfig(flags.config);
+    const mcpUrl = flags.mcp ?? cfg.mcps?.[0];
+    const auth = flags.auth ?? cfg.auth;
 
-    this.log(chalk.cyan(`\nConnecting to MCP server: ${flags.mcp}\n`));
+    if (!mcpUrl) {
+      this.error('MCP server URL is required. Pass --mcp or set mcps in config file.');
+    }
+
+    this.log(chalk.cyan(`\nConnecting to MCP server: ${mcpUrl}\n`));
 
     const mcp = await createMCPClient({
       transport: {
         type: 'http',
-        url: flags.mcp,
-        ...(flags.auth ? { headers: { Authorization: `Bearer ${flags.auth}` } } : {}),
+        url: mcpUrl,
+        ...(auth ? { headers: { Authorization: `Bearer ${auth}` } } : {}),
       },
     });
 

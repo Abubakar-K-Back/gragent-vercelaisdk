@@ -5,3 +5,6 @@ dist/
 
 gragent.config.json
 session.json
+configs/acelink-uat.json
+configs/aws-partner.json
+configs/kafka-listener.json
